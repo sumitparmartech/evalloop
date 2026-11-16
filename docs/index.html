@@ -766,7 +766,7 @@ report written to report.html</pre></div>
 
   /* ---------- transports ---------- */
   var PROVIDERS = {
-    groq: { label: 'Groq (free tier)', base: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', key: true },
+    groq: { label: 'Groq (free tier)', base: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b', key: true },
     openrouter: { label: 'OpenRouter', base: 'https://openrouter.ai/api/v1', model: 'meta-llama/llama-3.3-70b-instruct:free', key: true },
     gemini: { label: 'Google Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash', key: true },
     openai: { label: 'OpenAI', base: 'https://api.openai.com/v1', model: 'gpt-4o-mini', key: true },
@@ -1194,7 +1194,7 @@ render();
     if (err && err.name === 'AbortError') { status('Stopped.', 'warn'); say('wt', 'stopped by you'); return; }
     let m = err && err.message ? err.message : String(err);
     if (err && (err.status === 401 || err.status === 403)) m = 'The provider rejected the key (HTTP ' + err.status + '). Check it and try again.';
-    else if (err && err.status === 404) m = 'Endpoint or model not found (HTTP 404). Check the Base URL and the Model name.';
+    else if (err && err.status === 404) m = 'Endpoint or model not found (HTTP 404). The model may have been retired by the provider. Check the Base URL and the Model name.';
     else if (err && err.status === 429) m = 'Still rate limited after retries. Wait a minute, or use 1 trial per case.';
     else if (err instanceof TypeError) m = 'Could not reach the provider. Either this preview blocks outside network calls, or the provider does not allow browser requests (CORS). Try the mock model, or open the deployed site.';
     status(m, 'err'); say('fa', 'error  ' + m);

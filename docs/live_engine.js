@@ -89,7 +89,7 @@
 
   /* ---------- transports ---------- */
   var PROVIDERS = {
-    groq: { label: 'Groq (free tier)', base: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', key: true },
+    groq: { label: 'Groq (free tier)', base: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b', key: true },
     openrouter: { label: 'OpenRouter', base: 'https://openrouter.ai/api/v1', model: 'meta-llama/llama-3.3-70b-instruct:free', key: true },
     gemini: { label: 'Google Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash', key: true },
     openai: { label: 'OpenAI', base: 'https://api.openai.com/v1', model: 'gpt-4o-mini', key: true },
