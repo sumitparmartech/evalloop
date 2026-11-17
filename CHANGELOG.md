@@ -2,6 +2,7 @@
 
 ## 0.6.0
 
+- New website design: a "graded paper" hero that marks a hallucinated amount live, a scroll story from 33% to 100%, a 3-step quickstart with tabs for plain Python, OpenAI Agents SDK and LangGraph, hover animations on every check, a dark "Try it live" lab with a one-click demo, a sticky how-it-works rail, a mobile menu, and full reduced-motion support.
 - New `evalloop.frameworks`: `openai_agents_agent` (OpenAI Agents SDK) and `langgraph_agent` (LangGraph), plus `from_agents_result` and `from_langchain_messages` converters. Multi-turn history and prompt-injection poisoning work through both. Tested against the real packages with a scripted model.
 - New `poisoned(tool_name, result)` helper for injection tests inside framework tools.
 - New `examples/benchmark.py`: one command to benchmark a real model on core cases, every built-in injection attack and messy inputs, with HTML reports and a SUMMARY.md table.
