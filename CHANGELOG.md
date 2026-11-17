@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- New `evalloop.frameworks`: `openai_agents_agent` (OpenAI Agents SDK) and `langgraph_agent` (LangGraph), plus `from_agents_result` and `from_langchain_messages` converters. Multi-turn history and prompt-injection poisoning work through both. Tested against the real packages with a scripted model.
+- New `poisoned(tool_name, result)` helper for injection tests inside framework tools.
+- New `examples/benchmark.py`: one command to benchmark a real model on core cases, every built-in injection attack and messy inputs, with HTML reports and a SUMMARY.md table.
+- Package is ready for PyPI as `evalloop-agents` (the import name stays `evalloop`). Extras: `[agents]`, `[langgraph]`. See PUBLISHING.md.
+- Docs: comparison page (docs/COMPARISON.md), CONTRIBUTING.md with good first issues, issue and PR templates, a test matrix workflow for Python 3.9 to 3.13, and an Open Graph share image.
+
 ## 0.5.1
 
 - New "Signal Light" look for the project site and the HTML report (warm paper background, amber accent, clearer pass and fail colours).

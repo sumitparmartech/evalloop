@@ -6,6 +6,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>evalloop: tests and a CI gate for LLM agents</title>
 <meta name="description" content="Unit tests and a CI gate for LLM agents. Reliability (pass^k), multi-turn conversations, prompt injection, hallucination, loops, cost and latency.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="evalloop: tests and a CI gate for LLM agents">
+<meta property="og:description" content="Your agent passed once. Run it five times. Reliability, prompt injection, multi-turn chats and a CI gate. Open source.">
+<meta property="og:url" content="https://sumitparmartech.github.io/evalloop/">
+<meta property="og:image" content="https://sumitparmartech.github.io/evalloop/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://sumitparmartech.github.io/evalloop/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -465,7 +474,7 @@ html.theming *,html.theming *::before,html.theming *::after{transition:backgroun
       <h1>Your agent passed once. <em>Run it <span class="u">five times.<svg viewBox="0 0 300 14" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1" d="M3 9 Q30 1 60 8 T120 8 T180 8 T240 8 T297 6"/></svg></span></em></h1>
       <p class="lead">evalloop replays your agent against real cases, checks every tool call and every answer, and fails the build when behavior regresses.</p>
       <div class="cta">
-        <div class="install"><span><span class="p">$</span> pip install -e .</span><button type="button" id="copy">Copy</button></div>
+        <div class="install"><span><span class="p">$</span> pip install evalloop-agents</span><button type="button" id="copy">Copy</button></div>
         <a class="btn pri" href="#demo">See a live report</a>
       </div>
       <div class="facts">
@@ -1081,7 +1090,7 @@ buildTerm();
 $('#replay').addEventListener('click', function () { buildTerm(); });
 $('#copy').addEventListener('click', function (e) {
   const b = e.currentTarget;
-  try { navigator.clipboard.writeText('pip install -e .').then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); }, function () { b.textContent = 'Select and copy'; }); }
+  try { navigator.clipboard.writeText('pip install evalloop-agents').then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); }, function () { b.textContent = 'Select and copy'; }); }
   catch (err) { b.textContent = 'Select and copy'; }
 });
 

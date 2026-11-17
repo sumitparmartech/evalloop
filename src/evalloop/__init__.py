@@ -29,12 +29,13 @@ from .traces import from_anthropic_messages, from_openai_messages, load_traces, 
 from .ci import assert_reliable, to_junit, to_markdown
 from .redteam import INJECTIONS, injection_cases, perturb, variants
 from .instrument import agent, current, log_llm, poisoning, record, tool
+from .instrument import apply_poison as poisoned
 from .runner import Case, Context, Conversation, Turn, SuiteResult, diff_runs, run_suite
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 
 __all__ = [
-    "AdapterError", "INJECTIONS", "injection_cases", "perturb", "variants", "agent", "tool", "log_llm", "record", "current", "poisoning", "Case", "Conversation", "Turn", "Check", "CheckResult", "Context", "Step", "SuiteResult", "Trace", "Tracer",
+    "AdapterError", "poisoned", "INJECTIONS", "injection_cases", "perturb", "variants", "agent", "tool", "log_llm", "record", "current", "poisoning", "Case", "Conversation", "Turn", "Check", "CheckResult", "Context", "Step", "SuiteResult", "Trace", "Tracer",
     "answer_contains", "answer_matches", "answer_not_contains", "cost_under", "custom",
     "chat_agent", "diff_runs", "from_provider", "grounded", "json_answer", "judge", "latency_under", "max_steps", "no_loop",
     "no_pii", "no_secret_leak", "no_tool_errors", "render_html", "run_suite", "tool_args",

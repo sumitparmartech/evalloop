@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Try the live demo
+    url: https://sumitparmartech.github.io/evalloop/
+    about: See the report and run the demo agent in your browser.

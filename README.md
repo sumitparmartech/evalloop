@@ -1,10 +1,17 @@
 # evalloop
 
+[![tests](https://github.com/sumitparmartech/evalloop/actions/workflows/tests.yml/badge.svg)](https://github.com/sumitparmartech/evalloop/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/evalloop-agents)](https://pypi.org/project/evalloop-agents/)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://pypi.org/project/evalloop-agents/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+**[Live demo](https://sumitparmartech.github.io/evalloop/)** · **[How it compares](docs/COMPARISON.md)** · **[Changelog](CHANGELOG.md)**
+
 Unit tests and a CI gate for LLM agents. Zero dependencies, no API key needed to try it. Python 3.9+.
 
 Most agent demos work once. Production agents fail 1 run in 5, quote amounts they never saw, obey instructions hidden in a web page, and loop on vague questions. `evalloop` runs your agent many times against a suite of cases, checks the full trace (not just the final answer), and fails your build when behavior regresses.
 
-![report](docs/report_v1.png)
+![report](https://raw.githubusercontent.com/sumitparmartech/evalloop/main/docs/report_v1.png)
 
 ## What it catches
 
@@ -25,9 +32,21 @@ Most agent demos work once. Production agents fail 1 run in 5, quote amounts the
 | Bad output format | `json_answer(...)`, `answer_matches(regex)` |
 | Anything else | `custom(name, fn)` |
 
+## Install
+
+```bash
+pip install evalloop-agents            # the import name is still: import evalloop
+# or the latest code from GitHub:
+pip install git+https://github.com/sumitparmartech/evalloop
+```
+
+Optional extras: `pip install "evalloop-agents[agents]"` for the OpenAI Agents SDK adapter,
+`pip install "evalloop-agents[langgraph]"` for LangGraph.
+
 ## Quickstart
 
 ```bash
+git clone https://github.com/sumitparmartech/evalloop && cd evalloop
 pip install -e .
 cd examples
 python -m evalloop.cli run suite:cases --agent support_agent:agent_v1 \
@@ -46,7 +65,7 @@ The example support agent is simulated so the demo is free and deterministic. Ve
 | Latency p95 | 3.1 s | 1.0 s |
 | Cost per run | $0.0105 | $0.0026 |
 
-![diff](docs/report.png)
+![diff](https://raw.githubusercontent.com/sumitparmartech/evalloop/main/docs/report.png)
 
 ## Test your own agent
 
@@ -100,6 +119,36 @@ agent = from_provider("groq", system=SYSTEM, tools=TOOLS, impls={"lookup_order":
 For a local model with no key at all, use `from_provider("ollama", ...)`. Free tiers have rate limits, so start with `--trials 1` or `--trials 3`. Set `price_in` and `price_out` (USD per 1M tokens) if you want `cost_under` to mean something.
 
 The adapter is tested against a scripted fake provider. Model names change over time, so set `EVALLOOP_MODEL` if the default is retired.
+
+## OpenAI Agents SDK and LangGraph
+
+Test an agent built with a framework as it is. The wrapper runs it, then turns tool calls,
+tool outputs, model calls and token usage into a trace, so every check, report and CI gate works.
+
+```python
+from evalloop import run_suite
+from evalloop.frameworks import openai_agents_agent, langgraph_agent, poisoned
+
+results = run_suite(openai_agents_agent(support_agent), cases, trials=5)   # agents.Agent
+results = run_suite(langgraph_agent(graph), cases, trials=5)                # compiled StateGraph
+```
+
+Multi-turn `Conversation` cases pass earlier turns as message history. For prompt injection
+tests, return `poisoned("tool_name", result)` from inside a tool; evalloop adds the attack
+text only when a case sets `poison=`. Both adapters are tested against the real packages
+(`tests/test_frameworks.py`), using a scripted model so no API key is needed.
+
+## Benchmark a real model
+
+```bash
+export GROQ_API_KEY=...          # PowerShell: $env:GROQ_API_KEY="..."
+cd examples
+python benchmark.py --trials 10                       # or --provider openai --model gpt-4.1-mini
+```
+
+It runs three suites (core cases with many trials, every built-in injection attack, and messy
+rewrites of the order cases) and writes HTML reports plus a `SUMMARY.md` table to
+`benchmark_results/<provider>-<model>/`.
 
 ## Add it to an agent you already have (two decorators)
 
@@ -180,7 +229,7 @@ cases = [
 
 The demo in `examples/convo_agent.py` has a v1 that only reads the latest message and a v2 that uses the history. evalloop fails v1 on 3 of 4 conversations and passes v2 on all of them:
 
-![conversation report](docs/report_convo.png)
+![conversation report](https://raw.githubusercontent.com/sumitparmartech/evalloop/main/docs/report_convo.png)
 
 ```bash
 cd examples
@@ -276,7 +325,8 @@ If an agent passes a task 80% of the time, running it once and seeing a pass tel
 ## Roadmap
 
 - A hosted dashboard (today: a local trend page from `--store`)
-- Adapters for LangChain and LlamaIndex callbacks
+- Adapters for LlamaIndex and CrewAI
+- Published benchmark numbers for popular models
 - Judge calibration against human labels
 
 ## Develop
@@ -285,5 +335,7 @@ If an agent passes a task 80% of the time, running it once and seeing a pass tel
 pip install -e ".[dev]"
 pytest
 ```
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, style and a list of good first issues.
 
 MIT licensed.

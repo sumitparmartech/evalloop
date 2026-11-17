@@ -1,0 +1,16 @@
+name: Feature request
+description: A new check, adapter or report feature
+labels: [enhancement]
+body:
+  - type: textarea
+    id: failure
+    attributes:
+      label: Which agent failure should this catch?
+      description: Describe a real failure you saw. Concrete examples help most.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How would you like to use it?
+      render: python
