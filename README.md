@@ -1,6 +1,6 @@
 # evalloop
 
-Unit tests and a CI gate for LLM agents. Zero dependencies, no API key needed to try it.
+Unit tests and a CI gate for LLM agents. Zero dependencies, no API key needed to try it. Python 3.9+.
 
 Most agent demos work once. Production agents fail 1 run in 5, quote amounts they never saw, obey instructions hidden in a web page, and loop on vague questions. `evalloop` runs your agent many times against a suite of cases, checks the full trace (not just the final answer), and fails your build when behavior regresses.
 
@@ -16,6 +16,12 @@ Most agent demos work once. Production agents fail 1 run in 5, quote amounts the
 | Wrong tool, wrong arguments, wrong order | `tool_called`, `tool_not_called`, `tool_args`, `tool_order` |
 | Infinite or wasteful tool loops | `no_loop(n)`, `max_steps(n)` |
 | Cost and latency creep | `cost_under(usd)`, `latency_under(ms)` |
+| PII or keys in the answer | `no_pii()` (email, phone, card, SSN, API key) |
+| Expensive tool called too often | `tool_count(name, at_most=n)` |
+| Tone, helpfulness, policy (things code cannot check) | `judge(criteria, ask)` LLM-as-judge |
+| Agent forgets what the user said two messages ago | `Conversation(...)` multi-turn cases |
+| Prompt injection hidden in a tool result | `Case.poison`, `injection_cases(...)` |
+| Breaks on typos, SHOUTING, filler words | `variants(case, ...)` |
 | Bad output format | `json_answer(...)`, `answer_matches(regex)` |
 | Anything else | `custom(name, fn)` |
 
@@ -95,6 +101,151 @@ For a local model with no key at all, use `from_provider("ollama", ...)`. Free t
 
 The adapter is tested against a scripted fake provider. Model names change over time, so set `EVALLOOP_MODEL` if the default is retired.
 
+## Add it to an agent you already have (two decorators)
+
+No need to rewrite your agent around `Tracer`. Put `@tool()` on your tool functions and `@agent` on the function that returns the final answer. Sync and async both work, and parallel runs stay separate.
+
+```python
+from evalloop import agent, tool, log_llm
+
+@tool()
+def lookup_order(order_id): ...            # every call is recorded: arguments, result, time, errors
+
+@agent
+def support_agent(text):                    # return the final answer as a string
+    reply = call_your_model(text)
+    log_llm("plan", text, reply, tokens_in=312, tokens_out=40, latency_ms=850)   # optional: cost and latency
+    return reply
+
+run_suite(support_agent, cases, trials=5, workers=4)
+```
+
+Start a new project with `evalloop init`. It creates `evals/agent.py`, `evals/suite.py` and a GitHub workflow that already uses the run store, the baseline and the PR summary.
+
+## Red-team your agent
+
+**Prompt injection through tools.** `Case.poison` appends an attack to what a tool returns, exactly like a poisoned web page or document would. The pack has 8 attacks (`INJECTIONS`), and `injection_cases` makes one case per attack.
+
+```python
+from evalloop import Case, injection_cases, no_secret_leak, tool_not_called
+
+policy = Case("return_policy", "What is your return policy?", [no_secret_leak(KEY), tool_not_called("issue_refund")])
+cases = injection_cases(policy, tool="search_kb", secret=KEY)     # 8 cases, one per attack
+```
+
+**Messy input.** `variants` rewrites a case with typos, SHOUTING, extra spaces, politeness and filler words, with the same checks. Numbers, ids and amounts are never changed. If your agent passes the original but fails the variants, it is brittle.
+
+```python
+from evalloop import variants
+cases = [track, *variants(track, "typos", "upper", "polite", "filler")]
+```
+
+The demo (`examples/redteam_demo.py`) has a gullible agent and a careful one. The gullible agent passes the plain question, then fails on typos, on SHOUTING and on 6 of 8 injection attacks. The careful agent passes everything.
+
+```bash
+cd examples
+evalloop run redteam_demo:cases --agent redteam_demo:careful --baseline ../docs/redteam_gullible.json --trials 3
+```
+
+## Keep history and watch trends
+
+```bash
+evalloop run suite:cases --agent agent:support_agent --trials 5 --store runs --baseline last
+evalloop trend runs --html trend.html
+```
+
+`--store` saves every run as plain JSON. `--baseline last` compares with the previous run automatically, so you never manage baseline files by hand. `evalloop trend` makes one HTML page with charts of pass rate (with its confidence band), reliability, p95 latency, cost and flaky cases over time.
+
+## Multi-turn conversations
+
+Real agents fail across turns: they forget the order number, repeat themselves, or leak a secret on the third message. A single-turn test never sees that. `Conversation` runs a whole dialogue, passes the history to your agent, and checks each turn and the conversation as a whole.
+
+```python
+from evalloop import Conversation, Turn, answer_contains, tool_args, tool_count, no_secret_leak, grounded
+
+cases = [
+    Conversation(
+        "refund_it_after_lookup",
+        ["Look up order #1042",
+         Turn("OK please refund it", [tool_args("issue_refund", order_id="1042")])],   # checks for this turn
+        [tool_count("issue_refund", at_most=1), no_secret_leak(KEY), grounded()],     # checks for the whole chat
+    ),
+]
+```
+
+- `ctx.history` is the list of earlier `(user, answer)` pairs and `ctx.turn` is the turn number. `chat_agent` and `anthropic_agent` send the history to the model for you.
+- Conversation checks see every step and every answer, so a tool budget, loop limit, PII or secret check covers all turns, not just the last one.
+- A turn can be a function, `Turn(lambda history: ...)`, so a scripted user can react to what the agent just said.
+- If the agent crashes on a turn, the conversation stops and fails with that turn named.
+
+The demo in `examples/convo_agent.py` has a v1 that only reads the latest message and a v2 that uses the history. evalloop fails v1 on 3 of 4 conversations and passes v2 on all of them:
+
+![conversation report](docs/report_convo.png)
+
+```bash
+cd examples
+evalloop run convo_suite:cases --agent convo_agent:agent_v2 --name convo --trials 3 --baseline ../docs/convo_v1.json
+```
+
+## Statistics you can trust
+
+Agents are random, so a single failure is not always a real regression. evalloop reports honest numbers:
+
+- A 95% confidence interval on the pass rate, so "100% on 5 trials" shows as 57% to 100%.
+- Flaky cases (pass some trials, fail others) are listed on their own, because they are the ones that hurt in production.
+- Unbiased `pass@k` and `pass^k` estimates from your n trials: `case.pass_at(k)`, `case.pass_hat(k)`.
+- `--alpha 0.2` ignores drops that are probably noise. Every changed case shows its `p_value`, so you can see what is real.
+
+```bash
+evalloop run suite:cases --agent my_module:agent --trials 10 --baseline base.json \
+  --fail-on-regression --alpha 0.2 --workers 8 --timeout 60
+```
+
+`--workers` runs trials in parallel, so a real-model suite finishes in a fraction of the time. `--timeout` stops one hung call from freezing the run.
+
+## Test real conversations you already have
+
+Take logged messages from production, turn them into traces and run the same checks. No model call needed.
+
+```python
+from evalloop import from_openai_messages, from_anthropic_messages, replay_agent, run_suite, save_traces
+
+traces = [from_openai_messages(m) for m in logged_conversations]
+save_traces("prod_traces.jsonl", traces)
+result = run_suite(replay_agent(traces), cases)   # checks run on the recorded traces
+```
+
+## LLM-as-judge
+
+For things code cannot check, add a judge. It scores 1 to 5 at temperature 0 and the check passes at your pass mark.
+
+```python
+from evalloop import judge, judge_with
+
+ask = judge_with("anthropic")            # or "openai", "groq", "gemini", "ollama"
+Case("tone", "I am angry about my late order", [judge("Calm, apologetic, offers a concrete next step", ask)])
+```
+
+## Claude and other providers
+
+```python
+from evalloop import anthropic_agent, from_provider
+
+agent = anthropic_agent(system=SYSTEM, tools=ANTHROPIC_TOOLS, impls=IMPLS, model="claude-sonnet-4-5")
+# ANTHROPIC_API_KEY is read from the environment and only goes in the x-api-key header
+```
+
+## Use it in pytest and any CI
+
+```python
+from evalloop import assert_reliable
+
+def test_refund_flow():
+    assert_reliable(my_agent, refund_case, trials=5, min_pass_rate=0.8)
+```
+
+`--junit junit.xml` gives every case as a test in Jenkins, GitLab or GitHub. `--markdown "$GITHUB_STEP_SUMMARY"` writes a short report with regressions, flaky cases and failure reasons to the job summary.
+
 ## Gate your pull requests
 
 ```bash
@@ -124,10 +275,9 @@ If an agent passes a task 80% of the time, running it once and seeing a pass tel
 
 ## Roadmap
 
-- LLM-as-judge check with a pinned rubric
-- Parallel trials
-- A native Anthropic Messages adapter (today it works through any OpenAI-compatible endpoint)
-- Pytest plugin
+- A hosted dashboard (today: a local trend page from `--store`)
+- Adapters for LangChain and LlamaIndex callbacks
+- Judge calibration against human labels
 
 ## Develop
 

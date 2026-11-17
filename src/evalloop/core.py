@@ -34,6 +34,20 @@ class Trace:
     steps: list = dc.field(default_factory=list)
     answer: str = ""
     error: Optional[str] = None
+    # Multi-turn conversations: what the user said and the agent answered on every turn.
+    turn_inputs: list = dc.field(default_factory=list)
+    turn_answers: list = dc.field(default_factory=list)
+    # Steps from earlier turns, so a per-turn check can still see facts the agent saw before.
+    prior_steps: list = dc.field(default_factory=list)
+
+    @property
+    def all_answers(self) -> list:
+        """Every answer the agent gave (one for a single-turn run)."""
+        return list(self.turn_answers) if self.turn_answers else [self.answer]
+
+    @property
+    def all_inputs(self) -> list:
+        return list(self.turn_inputs) if self.turn_inputs else [self.input]
 
     @property
     def tool_calls(self) -> list:
@@ -61,7 +75,11 @@ class Trace:
     @classmethod
     def from_dict(cls, d: dict) -> "Trace":
         steps = [Step(**s) for s in d.get("steps", [])]
-        return cls(input=d["input"], steps=steps, answer=d.get("answer", ""), error=d.get("error"))
+        return cls(
+            input=d["input"], steps=steps, answer=d.get("answer", ""), error=d.get("error"),
+            turn_inputs=list(d.get("turn_inputs", [])), turn_answers=list(d.get("turn_answers", [])),
+            prior_steps=[Step(**s) for s in d.get("prior_steps", [])],
+        )
 
 
 def text_of(value: Any) -> str:
@@ -129,6 +147,9 @@ class Tracer:
                 error = f"{type(exc).__name__}: {exc}"
                 output = None
         elapsed = (time.perf_counter() - start) * 1000
+        from .instrument import apply_poison  # local import: instrument imports core
+
+        output = apply_poison(name, output)
         self.trace.steps.append(
             Step("tool", name, args, output, elapsed if latency_ms is None else latency_ms, error=error)
         )

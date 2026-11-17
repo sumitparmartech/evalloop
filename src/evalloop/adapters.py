@@ -96,7 +96,10 @@ def chat_agent(
 
     def agent(text: str, ctx: Any = None):
         t = Tracer(text)
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": text}]
+        messages = [{"role": "system", "content": system}]
+        for said, answered in getattr(ctx, "history", None) or []:
+            messages += [{"role": "user", "content": said}, {"role": "assistant", "content": answered}]
+        messages.append({"role": "user", "content": text})
         for _ in range(max_turns):
             start = time.perf_counter()
             resp = call(messages)
@@ -144,3 +147,141 @@ def from_provider(provider: str, *, system: str, tools: list, impls: dict, model
         raise ValueError(f"unknown provider {provider!r}; choose one of {', '.join(PROVIDERS)}")
     base, env, default_model = PROVIDERS[provider]
     return chat_agent(system=system, tools=tools, impls=impls, model=model or default_model, base_url=base, api_key_env=env, **kw)
+
+
+# ---------------------------------------------------------------- Anthropic (native Messages API)
+
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+
+
+def anthropic_agent(
+    *,
+    system: str,
+    tools: list,
+    impls: dict,
+    model: str,
+    api_key: Optional[str] = None,
+    api_key_env: str = "ANTHROPIC_API_KEY",
+    max_tokens: int = 1024,
+    temperature: float = 0.7,
+    max_turns: int = 6,
+    price_in: float = 0.0,
+    price_out: float = 0.0,
+    timeout: float = 60.0,
+    retries: int = 2,
+    base_url: str = ANTHROPIC_URL,
+    post: Optional[Callable[..., dict]] = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Callable:
+    """Same as chat_agent, but for Claude through the native Messages API.
+
+    tools: Anthropic-format schemas ({"name", "description", "input_schema"}).
+    The key is read from ANTHROPIC_API_KEY and only goes in the x-api-key header.
+    """
+    key = api_key if api_key is not None else os.environ.get(api_key_env, "")
+    send = post or _http_post
+
+    def call(messages: list) -> dict:
+        headers = {"Content-Type": "application/json", "anthropic-version": "2023-06-01"}
+        if key:
+            headers["x-api-key"] = key
+        payload = {
+            "model": model,
+            "system": system,
+            "messages": messages,
+            "tools": tools,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        for attempt in range(retries + 1):
+            try:
+                return send(base_url, payload, headers, timeout)
+            except AdapterError as exc:
+                if (exc.status in _RETRY_STATUS or exc.status == 529) and attempt < retries:
+                    sleep(2 ** attempt * 2)
+                    continue
+                raise
+        raise AdapterError("unreachable")
+
+    def agent(text: str, ctx: Any = None):
+        t = Tracer(text)
+        messages: list = []
+        for said, answered in getattr(ctx, "history", None) or []:
+            messages += [{"role": "user", "content": said}, {"role": "assistant", "content": answered}]
+        messages.append({"role": "user", "content": text})
+        for _ in range(max_turns):
+            start = time.perf_counter()
+            resp = call(messages)
+            ms = (time.perf_counter() - start) * 1000
+            blocks = resp.get("content") or []
+            uses = [b for b in blocks if b.get("type") == "tool_use"]
+            said = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+            usage = resp.get("usage") or {}
+            t.llm(
+                "plan" if uses else "answer",
+                messages[-1]["content"] if isinstance(messages[-1]["content"], str) else "tool results",
+                said or [u["name"] for u in uses],
+                tokens_in=usage.get("input_tokens"),
+                tokens_out=usage.get("output_tokens"),
+                latency_ms=ms,
+                price_in=price_in,
+                price_out=price_out,
+            )
+            if not uses:
+                return t.finish(said)
+            messages.append({"role": "assistant", "content": blocks})
+            results = []
+            for u in uses:
+                fn = impls.get(u["name"])
+                args = u.get("input") or {}
+                if fn is None:
+                    out = t.tool(u["name"], args, output={"error": f"unknown tool {u['name']}"})
+                else:
+                    out = t.tool(u["name"], args, fn=fn)
+                    if t.trace.steps[-1].error:
+                        out = {"error": t.trace.steps[-1].error}
+                results.append({"type": "tool_result", "tool_use_id": u["id"], "content": json.dumps(out, default=str)})
+            messages.append({"role": "user", "content": results})
+        trace = t.finish("")
+        trace.error = f"no final answer after {max_turns} turns"
+        return trace
+
+    return agent
+
+
+def judge_with(provider: str, model: Optional[str] = None, *, api_key: Optional[str] = None,
+               post: Optional[Callable[..., dict]] = None, timeout: float = 60.0) -> Callable[[str], str]:
+    """Build the `ask(prompt) -> text` function that the `judge` check needs.
+
+    provider is "anthropic" or any name in PROVIDERS (openai, groq, openrouter, gemini, ollama).
+    Uses temperature 0 so the same answer gets the same score.
+    """
+    send = post or _http_post
+    if provider == "anthropic":
+        key = api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY", "")
+
+        def ask_anthropic(prompt: str) -> str:
+            headers = {"Content-Type": "application/json", "anthropic-version": "2023-06-01"}
+            if key:
+                headers["x-api-key"] = key
+            payload = {"model": model or "claude-haiku-4-5", "max_tokens": 300, "temperature": 0,
+                       "messages": [{"role": "user", "content": prompt}]}
+            resp = send(ANTHROPIC_URL, payload, headers, timeout)
+            return "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text")
+
+        return ask_anthropic
+    if provider not in PROVIDERS:
+        raise ValueError(f"unknown provider {provider!r}")
+    base, env, default_model = PROVIDERS[provider]
+    key = api_key if api_key is not None else (os.environ.get(env, "") if env else "")
+
+    def ask(prompt: str) -> str:
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["Authorization"] = "Bearer " + key
+        payload = {"model": model or default_model, "temperature": 0,
+                   "messages": [{"role": "user", "content": prompt}]}
+        resp = send(base.rstrip("/") + "/chat/completions", payload, headers, timeout)
+        return resp["choices"][0]["message"].get("content") or ""
+
+    return ask

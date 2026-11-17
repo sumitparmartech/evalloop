@@ -8,14 +8,14 @@ from .core import text_of
 from .runner import CaseResult, SuiteResult, TrialResult, diff_runs
 
 CSS = """
-:root{--bg:#f6f7f9;--card:#fff;--ink:#14171f;--mute:#5c6573;--line:#e3e6ec;--ok:#0f7b4d;--okbg:#e4f5ec;--bad:#b42318;--badbg:#fdeceb;--acc:#2f5bea;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-@media (prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#161b22;--ink:#e8ebf0;--mute:#9aa4b2;--line:#262d38;--ok:#4cc38a;--okbg:#10291f;--bad:#ff7b72;--badbg:#321615;--acc:#7b9cff}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+:root{--bg:#F5F0E6;--card:#FFFDF8;--ink:#1B1A17;--mute:#5B564B;--line:#E4DBC9;--ok:#0B7A4F;--okbg:#DCF4E9;--bad:#B3261E;--badbg:#FBE1DE;--acc:#9A4A00;--amber:#F5A524;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#14120E;--card:#1D1A14;--ink:#F3EEE3;--mute:#A8A08F;--line:#332E24;--ok:#46D39A;--okbg:#10291f;--bad:#FF8A80;--badbg:#321615;--acc:#F5A524}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:1040px;margin:0 auto;padding:32px 20px 64px}
 .tag{font:600 12px var(--mono);letter-spacing:.04em;color:var(--acc);text-transform:uppercase}
-h1{margin:4px 0 4px;font-size:28px;letter-spacing:-.01em}.sub{color:var(--mute);font-size:14px}
+h1{margin:4px 0 4px;font:800 30px/1.15 "Bricolage Grotesque","IBM Plex Sans",sans-serif;letter-spacing:-.02em}.sub{color:var(--mute);font-size:14px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:24px 0}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--amber);border-radius:14px;padding:16px}
 .kpi .l{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
 .kpi .v{font-size:30px;font-weight:650;letter-spacing:-.02em;margin-top:2px}
 .kpi .n{color:var(--mute);font-size:12px;margin-top:2px}
@@ -26,7 +26,7 @@ h1{margin:4px 0 4px;font-size:28px;letter-spacing:-.01em}.sub{color:var(--mute);
 .chip.bad{background:var(--badbg);color:var(--bad)}.chip.ok{background:var(--okbg);color:var(--ok)}
 h2{font-size:15px;margin:28px 0 10px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
 details.case{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
-details.case[open]{border-color:var(--acc)}
+details.case[open]{border-color:var(--amber)}
 summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:28px 1fr auto auto;gap:12px;align-items:center;padding:12px 14px}
 summary::-webkit-details-marker{display:none}
 .st{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px}
@@ -97,6 +97,16 @@ def _kpi(label, value, note, delta_html="") -> str:
     )
 
 
+def _answers(tr) -> str:
+    if len(tr.turn_answers) > 1:
+        rows = "".join(
+            f'<div class="ans"><b>Turn {i + 1}</b> user: {_e(_trunc(u, 200))}<br><b>Agent:</b> {_e(_trunc(a, 400)) or "(empty)"}</div>'
+            for i, (u, a) in enumerate(zip(tr.turn_inputs, tr.turn_answers))
+        )
+        return rows
+    return f'<div class="ans"><b>Answer:</b> {_e(_trunc(tr.answer, 500)) or "(empty)"}</div>'
+
+
 def _trial_block(t: TrialResult) -> str:
     rows = []
     for c in t.checks:
@@ -118,7 +128,7 @@ def _trial_block(t: TrialResult) -> str:
     return (
         f'<div class="trial"><h3>Trial {t.trial + 1} {verdict}</h3>'
         f'<ul class="checks">{"".join(rows)}</ul>'
-        f'<div class="ans"><b>Answer:</b> {_e(_trunc(t.trace.answer, 500)) or "(empty)"}</div>'
+        f'{_answers(t.trace)}'
         f'<div class="tl">{"".join(steps)}</div></div>'
     )
 
@@ -157,7 +167,7 @@ def render_html(result: SuiteResult, baseline: Optional[SuiteResult] = None) -> 
     k = result.trials_per_case
     kpis = "".join(
         [
-            _kpi("Pass rate", _pct(s["pass_rate"]), f"{k} trials per case", dl("pass_rate", lambda v: f"{v * 100:.0f}pt", True)),
+            _kpi("Pass rate", _pct(s["pass_rate"]), f"95% CI {_pct(s['pass_rate_low'])} to {_pct(s['pass_rate_high'])}", dl("pass_rate", lambda v: f"{v * 100:.0f}pt", True)),
             _kpi("Reliability (pass^k)", _pct(s["reliability"]), f"cases that passed all {k} trials", dl("reliability", lambda v: f"{v * 100:.0f}pt", True)),
             _kpi("Latency p95", _ms(s["latency_p95_ms"]), f"p50 {_ms(s['latency_p50_ms'])}", dl("latency_p95_ms", _ms, False)),
             _kpi("Cost per run", _usd(s["cost_per_run_usd"]), f"{s['steps_per_run']:.1f} steps per run", dl("cost_per_run_usd", _usd, False)),
@@ -170,6 +180,10 @@ def render_html(result: SuiteResult, baseline: Optional[SuiteResult] = None) -> 
         imp = "".join(f'<span class="chip ok">{_e(r["id"])} {_pct(r["before"])} to {_pct(r["after"])}</span>' for r in d.improved)
         head = f'<b>{len(d.regressed)} regressed</b>, <b>{len(d.improved)} improved</b>, {len(d.unchanged)} unchanged versus <b>{_e(baseline.label)}</b>.'
         banner = f'<div class="banner">{head}<div>{reg}{imp}</div></div>'
+
+    if result.flaky_cases:
+        chips = "".join(f'<span class="chip bad">{_e(i)}</span>' for i in result.flaky_cases)
+        banner += f'<div class="banner"><b>{len(result.flaky_cases)} flaky</b> (passed some trials, failed others):<div>{chips}</div></div>'
 
     base_map = {c.id: c for c in baseline.cases} if baseline else {}
     cases = "".join(_case_block(c, base_map.get(c.id)) for c in result.cases)

@@ -4,13 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "evalloop"
-version = "0.2.0"
-description = "Unit tests and a CI gate for LLM agents: reliability (pass^k), hallucination, prompt injection, loops, cost and latency."
+version = "0.5.1"
+description = "Unit tests and a CI gate for LLM agents: reliability (pass^k), multi-turn conversations, hallucination, prompt injection, loops, cost and latency."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 dependencies = []
-keywords = ["llm", "agents", "evals", "testing", "ci"]
+keywords = ["llm", "agents", "evals", "testing", "ci", "pass-k", "reliability", "llm-as-judge", "pytest"]
+authors = [{ name = "Sumit Parmar" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://sumitparmartech.github.io/evalloop/"
+Source = "https://github.com/sumitparmartech/evalloop"
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
@@ -20,6 +33,9 @@ evalloop = "evalloop.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+evalloop = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
