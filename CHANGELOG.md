@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- New `evalloop explain` (and `explain_case`, `explain_suite`): compares the passing and failing trials of a flaky case and reports where they split, such as a skipped or extra tool, a changed argument, a different order, a tool error, extra steps or slower runs, each with counts. Says so when tool calls match and only the answer differs. Always-failing cases get a description of what the runs did instead of made-up causes.
+- HTML report: a "Why it fails" block for every failing case, with a side-by-side diff of a passing and a failing trial.
+- `evalloop run --explain` prints the explanations right after a run. `examples/benchmark.py` adds them to SUMMARY.md.
+- New `evalloop compare` (and `compare_runs`, `render_compare_html`): several runs of one suite side by side, one per model, with pass rate and 95% interval, reliability, p95 latency, cost, API errors, a per-case matrix and a noise warning.
+
 ## 0.6.1
 
 - Site: new "Tested on a real model" section with the Groq gpt-oss-120b benchmark (docs/benchmarks/), a "Why I built this" section, fixed the scroll story (numbers now always match the squares on screen) and the quickstart card layout, and toned down decoration.

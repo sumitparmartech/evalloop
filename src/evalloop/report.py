@@ -5,6 +5,7 @@ import html
 from typing import Optional
 
 from .core import text_of
+from .explain import explain_case
 from .runner import CaseResult, SuiteResult, TrialResult, diff_runs
 
 CSS = """
@@ -46,6 +47,18 @@ summary::-webkit-details-marker{display:none}
 .tbl{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .tbl th,.tbl td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line)}.tbl th{color:var(--mute);font-weight:600;font-size:12px}
 footer{margin-top:40px;color:var(--mute);font-size:12px}
+.why{border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:16px}
+.why h4{margin:0 0 8px;font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--acc)}
+.why .hd{font-weight:650;margin-bottom:8px}
+.why ul{list-style:none;margin:0;padding:0}.why li{font-size:13px;padding:3px 0}
+.why .lb{display:inline-block;min-width:96px;font:600 11px var(--mono);text-transform:uppercase;color:var(--mute)}
+.why .lb.c{color:var(--bad)}.why .n{color:var(--mute);font:12px var(--mono)}
+.dif{width:100%;border-collapse:collapse;margin-top:10px;font:12px var(--mono)}
+.dif th{text-align:left;color:var(--mute);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--line)}
+.dif td{padding:4px 8px;vertical-align:top;word-break:break-all;border-bottom:1px dashed var(--line);width:50%}
+.dif tr.changed td{background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.dif tr.only_pass td:first-child{background:var(--okbg)}.dif tr.only_fail td:last-child{background:var(--badbg)}
+
 
 .kpi{animation:rise .6s cubic-bezier(.2,.8,.2,1) both}
 .kpi:nth-child(2){animation-delay:.07s}.kpi:nth-child(3){animation-delay:.14s}.kpi:nth-child(4){animation-delay:.21s}.kpi:nth-child(5){animation-delay:.28s}
@@ -133,6 +146,27 @@ def _trial_block(t: TrialResult) -> str:
     )
 
 
+def _why_block(c: CaseResult) -> str:
+    ex = explain_case(c)
+    if ex is None:
+        return ""
+    labels = {"failed_check": ("symptom", ""), "pattern": ("what it did", ""), "answer_only": ("where to look", "")}
+    items = []
+    for f in ex.findings[:6]:
+        lb, _ = labels.get(f.kind, ("likely cause" if f.strength >= 0.5 else "also differs", ""))
+        cls = " c" if lb == "likely cause" else ""
+        items.append(f'<li><span class="lb{cls}">{_e(lb)}</span>{_e(f.summary)} <span class="n">[{_e(f.counts)}]</span></li>')
+    table = ""
+    if ex.alignment and ex.reference_trial is not None:
+        rows = "".join(
+            f'<tr class="{_e(r.op)}"><td>{_e(r.left or "")}</td><td>{_e(r.right or "")}</td></tr>' for r in ex.alignment
+        )
+        table = (f'<table class="dif"><tr><th>passing trial {ex.reference_trial + 1}</th>'
+                 f'<th>failing trial {ex.compared_trial + 1}</th></tr>{rows}</table>')
+    return (f'<div class="why"><h4>Why it fails ({ex.passes}/{ex.total} passed)</h4>'
+            f'<div class="hd">{_e(ex.headline)}</div><ul>{"".join(items)}</ul>{table}</div>')
+
+
 def _case_block(c: CaseResult, base: Optional[CaseResult]) -> str:
     dots = "".join(f'<span class="dot {"ok" if t.passed else "bad"}" title="trial {t.trial + 1}"></span>' for t in c.trials)
     rate = f"{_pct(c.pass_rate)}"
@@ -152,7 +186,7 @@ def _case_block(c: CaseResult, base: Optional[CaseResult]) -> str:
         f'<span class="st {status[0]}">{status[1] if status[0] == "bad" else "&#10003;"}</span>'
         f'<span><span class="cid">{_e(c.id)}</span> {tags}<div class="inp">{_e(c.input)}</div></span>'
         f'<span class="dots">{dots}</span><span class="rate">{rate}{delta}</span></summary>'
-        f'<div class="body">{"".join(_trial_block(t) for t in shown)}</div></details>'
+        f'<div class="body">{_why_block(c)}{"".join(_trial_block(t) for t in shown)}</div></details>'
     )
 
 

@@ -82,7 +82,7 @@ class _Pacer:
             self.sleep(start - now)
 
 
-USER_AGENT = "evalloop/0.6.1 (+https://github.com/sumitparmartech/evalloop)"
+USER_AGENT = "evalloop/0.7.0 (+https://github.com/sumitparmartech/evalloop)"
 
 
 def _http_post(url: str, payload: dict, headers: dict, timeout: float) -> dict:

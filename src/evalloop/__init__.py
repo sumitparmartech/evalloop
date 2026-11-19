@@ -31,11 +31,13 @@ from .redteam import INJECTIONS, injection_cases, perturb, variants
 from .instrument import agent, current, log_llm, poisoning, record, tool
 from .instrument import apply_poison as poisoned
 from .runner import Case, Context, Conversation, Turn, SuiteResult, diff_runs, run_suite
+from .explain import explain_case, explain_suite
+from .compare import compare_runs, render_compare_html
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 __all__ = [
-    "AdapterError", "poisoned", "INJECTIONS", "injection_cases", "perturb", "variants", "agent", "tool", "log_llm", "record", "current", "poisoning", "Case", "Conversation", "Turn", "Check", "CheckResult", "Context", "Step", "SuiteResult", "Trace", "Tracer",
+    "AdapterError", "poisoned", "explain_case", "explain_suite", "compare_runs", "render_compare_html", "INJECTIONS", "injection_cases", "perturb", "variants", "agent", "tool", "log_llm", "record", "current", "poisoning", "Case", "Conversation", "Turn", "Check", "CheckResult", "Context", "Step", "SuiteResult", "Trace", "Tracer",
     "answer_contains", "answer_matches", "answer_not_contains", "cost_under", "custom",
     "chat_agent", "diff_runs", "from_provider", "grounded", "json_answer", "judge", "latency_under", "max_steps", "no_loop",
     "no_pii", "no_secret_leak", "no_tool_errors", "render_html", "run_suite", "tool_args",

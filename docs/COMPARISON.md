@@ -18,6 +18,9 @@ that run in CI**.
   probably luck is labelled as noise instead of failing the build.
 - **Attacks and messy input built in.** `Case(poison=...)` injects attack text into a tool
   result; `variants(case)` rewrites inputs with typos, caps and filler.
+- **Explains flaky cases.** `evalloop explain` compares passing and failing trials of the same case
+  and reports where they split (a skipped tool, a changed argument, a loop), with counts.
+- **Side-by-side model comparison.** `evalloop compare` puts runs of the same suite next to each other.
 - **No dependencies.** Plain Python, a single-file HTML report, JUnit and Markdown output.
 - **Works with what you have.** Decorators for plain Python agents, adapters for any
   OpenAI-compatible API, Anthropic, the OpenAI Agents SDK and LangGraph, and importers for

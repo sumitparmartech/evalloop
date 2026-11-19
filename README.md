@@ -138,6 +138,37 @@ tests, return `poisoned("tool_name", result)` from inside a tool; evalloop adds 
 text only when a case sets `poison=`. Both adapters are tested against the real packages
 (`tests/test_frameworks.py`), using a scripted model so no API key is needed.
 
+## Why it fails: `evalloop explain`
+
+A case that passes 7 of 10 times usually fails for one concrete reason. `explain` compares the
+trials that passed with the trials that failed and tells you where they split, with counts:
+
+```text
+$ evalloop explain run.json
+refund_over_limit_escalates  3/5 passed (flaky)
+  symptom       check tool_called(escalate_to_human) failed: escalate_to_human called 0x  [2 of 2 failing runs]
+  likely cause  skipped escalate_to_human  [2 of 2 failing runs, 0 of 3 passing runs]
+  likely cause  called issue_refund, which passing runs do not call  [2 of 2 failing runs, 0 of 3 passing runs]
+  first split   trial 3 vs passing trial 1: tool call 2: expected escalate_to_human(...), got issue_refund(...)
+```
+
+It looks for skipped or extra tools, changed arguments, a different order, tool errors, extra
+steps (loops) and slow runs, and says so when the tool calls match and only the answer differs.
+The HTML report shows the same findings plus a side-by-side diff of a passing and a failing trial.
+Use `evalloop run ... --explain` to print it right after a run, or `explain_suite(result)` in Python.
+Findings point at the likely cause; they do not prove it.
+
+## Compare models: `evalloop compare`
+
+Run the same suite on several models, then put the runs side by side:
+
+```bash
+evalloop compare runs/gpt-4.1-mini.json runs/llama-70b.json runs/gpt-oss-120b.json --html compare.html
+```
+
+You get pass rate with a 95% interval, reliability, p95 latency, cost per run and API errors per
+model, a per-case matrix, and a note when the difference between the top two is within noise.
+
 ## Benchmark a real model
 
 ```bash

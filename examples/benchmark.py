@@ -27,7 +27,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from evalloop import from_provider, injection_cases, render_html, run_suite, variants  # noqa: E402
+from evalloop import explain_suite, from_provider, injection_cases, render_html, run_suite, variants  # noqa: E402
 from evalloop.adapters import PROVIDERS  # noqa: E402
 
 import real_agent  # noqa: E402
@@ -70,6 +70,7 @@ def main() -> int:
     }
 
     rows = []
+    whys: dict = {}
     for name, (cases, trials) in suites.items():
         if name in a.skip:
             continue
@@ -89,6 +90,7 @@ def main() -> int:
             print(f"\n   {errors} trials hit an error. First one: {first}")
         rows.append((name, len(cases), trials, res.pass_rate, lo, hi, res.reliability,
                      res.latency_p95, res.cost_per_run, errors, took, [c.id for c in res.cases if 0 < c.pass_rate < 1]))
+        whys[name] = [(e.case_id, e.passes, e.total, e.headline) for e in explain_suite(res)]
         print(f"\n   pass rate {pct(res.pass_rate)} (95% CI {pct(lo)} to {pct(hi)}), reliability {pct(res.reliability)}, "
               f"p95 {res.latency_p95 / 1000:.1f}s, {took:.0f}s total")
 
@@ -107,6 +109,11 @@ def main() -> int:
     if flaky:
         lines += ["", "Flaky cases (passed some trials, failed others):", ""]
         lines += [f"- {suite}: {', '.join(ids)}" for suite, ids in flaky]
+    if any(whys.values()):
+        lines += ["", "Why cases fail (from `evalloop explain`, comparing passing and failing runs of the same case):", ""]
+        for suite_name, items in whys.items():
+            for cid, ok, tot, head in items:
+                lines.append(f"- {suite_name} / {cid} ({ok}/{tot} passed): {head}")
     lines += ["", "Cost is shown only when you pass --price-in and --price-out from your provider's pricing page.",
               "Errors are trials where the API call failed even after retries (rate limits, timeouts). They count as failures,",
               "so only publish numbers from a run with 0 errors.", ""]

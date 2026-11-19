@@ -8,6 +8,7 @@ import sys
 
 from .ci import to_junit, to_markdown
 from .report import render_html
+from .explain import explain_suite
 from .runner import SuiteResult, diff_runs, run_suite
 from .store import latest, list_runs, render_trend, save_run, suites_in
 
@@ -50,6 +51,17 @@ def _print_diff(d, base_label: str, new_label: str) -> None:
     print(f"  {len(d.unchanged)} unchanged, {len(d.added)} added, {len(d.removed)} removed")
 
 
+def _print_explanations(res, exs=None) -> None:
+    exs = explain_suite(res) if exs is None else exs
+    if not exs:
+        print("\nevery case passed every trial: nothing to explain")
+        return
+    print(f"\nWhy cases fail ({len(exs)} case{'s' if len(exs) != 1 else ''}):\n")
+    for e in exs:
+        print(e.text())
+        print()
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="evalloop", description="Unit tests and a CI gate for LLM agents.")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -72,6 +84,7 @@ def main(argv=None) -> int:
     r.add_argument("--markdown", help="write a Markdown summary (use $GITHUB_STEP_SUMMARY on GitHub)")
     r.add_argument("--fail-under", type=float, help="exit 1 if pass rate is below this (0 to 1)")
     r.add_argument("--fail-on-regression", action="store_true", help="exit 1 if any case got worse than baseline")
+    r.add_argument("--explain", action="store_true", help="after the run, explain why flaky and failing cases fail")
 
     tr = sub.add_parser("trend", help="build an HTML trend report from a run store")
     tr.add_argument("store")
@@ -85,6 +98,16 @@ def main(argv=None) -> int:
     rp.add_argument("run")
     rp.add_argument("--baseline")
     rp.add_argument("--html", required=True)
+
+    ex = sub.add_parser("explain", help="explain why flaky and failing cases fail, from a saved run")
+    ex.add_argument("run")
+    ex.add_argument("--case", help="only this case id")
+    ex.add_argument("--json", action="store_true", help="print machine-readable JSON")
+
+    cp = sub.add_parser("compare", help="compare saved runs side by side, for example one per model")
+    cp.add_argument("runs", nargs="+")
+    cp.add_argument("--labels", help="comma-separated names, one per run")
+    cp.add_argument("--html", help="write an HTML comparison page")
 
     d = sub.add_parser("diff", help="compare two saved runs")
     d.add_argument("base")
@@ -107,6 +130,8 @@ def main(argv=None) -> int:
         else:
             base = SuiteResult.load(a.baseline) if a.baseline else None
         _print_summary(res)
+        if a.explain:
+            _print_explanations(res)
         code = 0
         dif = None
         if base:
@@ -160,6 +185,33 @@ def main(argv=None) -> int:
         with open(a.html, "w", encoding="utf-8") as f:
             f.write(render_html(res, base))
         print(f"report written to {a.html}")
+        return 0
+
+    if a.cmd == "explain":
+        res = SuiteResult.load(a.run)
+        exs = [e for e in explain_suite(res) if not a.case or e.case_id == a.case]
+        if a.case and not exs:
+            print(f"{a.case}: every trial passed, or no such case")
+            return 0
+        if a.json:
+            import json as _json
+
+            print(_json.dumps([e.to_dict() for e in exs], indent=2, default=str))
+        else:
+            _print_explanations(res, exs)
+        return 0
+
+    if a.cmd == "compare":
+        from .compare import compare_runs, render_compare_html
+
+        runs = [SuiteResult.load(x) for x in a.runs]
+        labels = [x.strip() for x in a.labels.split(",")] if a.labels else None
+        cmp = compare_runs(runs, labels)
+        print(cmp.text())
+        if a.html:
+            with open(a.html, "w", encoding="utf-8") as f:
+                f.write(render_compare_html(cmp))
+            print(f"comparison written to {a.html}")
         return 0
 
     if a.cmd == "diff":

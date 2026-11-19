@@ -438,6 +438,18 @@ footer a{display:block;text-decoration:none;padding:3px 0}
 footer a:hover{color:var(--ink)}
 
 
+
+/* ---------- explain ---------- */
+.xp{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch}
+.xp .code{margin:0;font-size:13px;line-height:1.75}
+.xp .code .f{color:#FFD27A}
+.xd{padding:20px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.xh{display:grid;grid-template-columns:1fr 1fr;gap:10px;font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--mute);padding-bottom:6px;border-bottom:1px solid var(--line)}
+.xr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.xr code{font:12.5px/1.55 var(--mono);padding:8px 10px;border-radius:8px;background:var(--raised);overflow-wrap:anywhere}
+.xr.ch code:first-child{background:var(--pass-bg)}.xr.ch code:last-child{background:var(--fail-bg)}
+.xn{margin:8px 0 0;color:var(--mute);font-size:13.5px}
+@media (max-width:1000px){.xp{grid-template-columns:1fr}}
 /* ---------- real results ---------- */
 .rr{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .rc{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:26px;display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -678,6 +690,31 @@ cases = [
       </div>
     </div>
     <p class="note">The demo agent is simulated so this page needs no API key. The numbers come from an actual evalloop run: 6 cases x 5 trials per version.</p>
+  </div>
+</section>
+
+<section class="sec" id="explain" style="padding-top:40px">
+  <div class="wrap">
+    <div class="sec-h"><span class="eb">New in 0.7</span><h2><span class="wipe">Not just that it failed.</span> <span class="wipe"><em>Why it failed.</em></span></h2><p class="lead" data-rv>A case that passes 3 of 5 times usually breaks for one reason. <code>evalloop explain</code> compares the runs that passed with the runs that failed and shows where they split, with counts.</p></div>
+    <div class="xp">
+      <pre class="code" data-rv><span class="p">$</span> evalloop explain run.json
+<span class="f">refund_over_limit_escalates</span>  3/5 passed (flaky)
+  <span class="c">symptom</span>       check tool_called(escalate_to_human) failed
+  <span class="k">likely cause</span>  skipped escalate_to_human
+                [2 of 2 failing runs, 0 of 3 passing runs]
+  <span class="k">likely cause</span>  called issue_refund, which passing runs do not call
+                [2 of 2 failing runs, 0 of 3 passing runs]
+  <span class="c">first split</span>   trial 3 vs passing trial 1, tool call 2:
+                expected escalate_to_human, got issue_refund</pre>
+      <div class="panel xd" data-rv>
+        <div class="xh"><span>passing trial 1</span><span>failing trial 3</span></div>
+        <div class="xr"><code>lookup_order(order_id="1044")</code><code>lookup_order(order_id="1044")</code></div>
+        <div class="xr ch"><code>escalate_to_human(order_id="1044", reason="over refund limit")</code><code>issue_refund(order_id="1044", amount=899.0)</code></div>
+        <div class="xr ch"><code>"...above my refund limit, so I escalated it to a human agent."</code><code>"Done. I refunded $899.00 for order 1044."</code></div>
+        <p class="xn">Demo agent. The HTML report shows this diff for every failing case.</p>
+      </div>
+    </div>
+    <p class="note" data-rv>It looks for skipped or extra tools, changed arguments, a different order, tool errors, loops and slow runs. Comparing models instead? <code>evalloop compare a.json b.json</code> puts reliability, latency and cost side by side.</p>
   </div>
 </section>
 
