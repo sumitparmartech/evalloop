@@ -97,3 +97,52 @@ def test_key_comes_from_env_and_ollama_needs_none(monkeypatch):
     with pytest.raises(ValueError):
         from_provider("nope", system="s", tools=[], impls={})
     assert "groq" in PROVIDERS
+
+
+def test_requests_send_a_real_user_agent(monkeypatch):
+    import urllib.request
+    from evalloop import adapters
+    seen = {}
+
+    class R:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"ok": true}'
+
+    def fake_urlopen(req, timeout=None):
+        seen.update({k.lower(): v for k, v in req.header_items()})
+        return R()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    adapters._http_post("https://example.test/v1/chat/completions", {"a": 1}, {"Authorization": "Bearer x"}, 5)
+    assert seen["user-agent"].startswith("evalloop/")
+    assert "urllib" not in seen["user-agent"].lower()
+    assert seen["authorization"] == "Bearer x"
+
+
+def test_retry_after_is_parsed_and_used():
+    from evalloop.adapters import _parse_retry_after, _backoff, _Pacer
+    assert _parse_retry_after("7", "") == 7.0
+    assert abs(_parse_retry_after(None, "Rate limit. Please try again in 1m2.5s. Visit") - 62.5) < 1e-9
+    assert abs(_parse_retry_after(None, "try again in 850ms") - 0.85) < 1e-9
+    assert _parse_retry_after(None, "no hint here") is None
+    assert _backoff(AdapterError("x", 429, 3.0), 0) == 3.5
+    assert _backoff(AdapterError("x", 429), 1) == 4.0
+    slept, t = [], [0.0]
+    p = _Pacer(30, sleep=lambda s: slept.append(s), clock=lambda: t[0])
+    p.wait(); p.wait(); p.wait()
+    assert slept == [2.0, 4.0]
+
+
+def test_rate_limited_call_waits_as_asked_then_succeeds():
+    calls, slept = [], []
+
+    def post(url, payload, headers, timeout):
+        calls.append(1)
+        if len(calls) < 3:
+            raise AdapterError("HTTP 429: slow down", 429, 1.5)
+        return {"choices": [{"message": {"content": "done"}}], "usage": {}}
+
+    agent = chat_agent(system="s", tools=[], impls={}, model="m", api_key="k", post=post, sleep=slept.append)
+    assert agent("hi").answer == "done"
+    assert slept == [2.0, 2.0]

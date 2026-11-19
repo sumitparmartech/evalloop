@@ -43,14 +43,21 @@ def main() -> int:
     ap.add_argument("--provider", default=os.environ.get("EVALLOOP_PROVIDER", "groq"), choices=sorted(PROVIDERS))
     ap.add_argument("--model", default=os.environ.get("EVALLOOP_MODEL"))
     ap.add_argument("--trials", type=int, default=10, help="trials per core case (default 10)")
-    ap.add_argument("--workers", type=int, default=2, help="parallel calls; keep low on free tiers")
+    ap.add_argument("--workers", type=int, default=2, help="parallel trials")
+    ap.add_argument("--rpm", type=float, default=None, help="max requests per minute (default: 25 for groq free tier, no cap otherwise)")
+    ap.add_argument("--price-in", type=float, default=0.0, help="USD per 1M input tokens, from your provider's pricing page")
+    ap.add_argument("--price-out", type=float, default=0.0, help="USD per 1M output tokens")
     ap.add_argument("--timeout", type=float, default=60.0)
     ap.add_argument("--out", default="benchmark_results")
     ap.add_argument("--skip", nargs="*", default=[], choices=["core", "injection", "messy"])
     a = ap.parse_args()
 
     model = a.model or PROVIDERS[a.provider][2]
-    agent = from_provider(a.provider, system=real_agent.SYSTEM, tools=real_agent.TOOLS, impls=real_agent.IMPLS, model=model)
+    rpm = a.rpm if a.rpm is not None else (25 if a.provider == "groq" else None)
+    agent = from_provider(a.provider, system=real_agent.SYSTEM, tools=real_agent.TOOLS, impls=real_agent.IMPLS, model=model,
+                          rpm=rpm, price_in=a.price_in, price_out=a.price_out)
+    if rpm:
+        print(f"Pacing requests to {rpm:g} per minute so the rate limit does not turn into failed trials.")
     folder = os.path.join(a.out, re.sub(r"[^A-Za-z0-9._-]+", "-", f"{a.provider}-{model}"))
     os.makedirs(folder, exist_ok=True)
     meta = {"provider": a.provider, "model": model}
@@ -77,6 +84,9 @@ def main() -> int:
             f.write(render_html(res))
         lo, hi = res.pass_interval
         errors = sum(1 for c in res.cases for t in c.trials if t.trace.error)
+        first = next((t.trace.error for c in res.cases for t in c.trials if t.trace.error), None)
+        if first:
+            print(f"\n   {errors} trials hit an error. First one: {first}")
         rows.append((name, len(cases), trials, res.pass_rate, lo, hi, res.reliability,
                      res.latency_p95, res.cost_per_run, errors, took, [c.id for c in res.cases if 0 < c.pass_rate < 1]))
         print(f"\n   pass rate {pct(res.pass_rate)} (95% CI {pct(lo)} to {pct(hi)}), reliability {pct(res.reliability)}, "
@@ -91,13 +101,15 @@ def main() -> int:
         "|---|---|---|---|---|---|---|---|",
     ]
     for name, n, k, pr, lo, hi, rel, p95, cost, err, _, _ in rows:
-        lines.append(f"| {name} | {n} x {k} | {pct(pr)} | {pct(lo)} to {pct(hi)} | {pct(rel)} | {p95 / 1000:.1f}s | ${cost:.4f} | {err} |")
+        cost_s = f"${cost:.4f}" if (a.price_in or a.price_out) else "not set"
+        lines.append(f"| {name} | {n} x {k} | {pct(pr)} | {pct(lo)} to {pct(hi)} | {pct(rel)} | {p95 / 1000:.1f}s | {cost_s} | {err} |")
     flaky = [(r[0], r[11]) for r in rows if r[11]]
     if flaky:
         lines += ["", "Flaky cases (passed some trials, failed others):", ""]
         lines += [f"- {suite}: {', '.join(ids)}" for suite, ids in flaky]
-    lines += ["", "Cost uses evalloop's default token prices unless you pass your own; check your provider's pricing.",
-              "Errors are trials where the API call failed (rate limits, timeouts). Re-run if this is high.", ""]
+    lines += ["", "Cost is shown only when you pass --price-in and --price-out from your provider's pricing page.",
+              "Errors are trials where the API call failed even after retries (rate limits, timeouts). They count as failures,",
+              "so only publish numbers from a run with 0 errors.", ""]
     with open(os.path.join(folder, "SUMMARY.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     print("\n" + "\n".join(lines))

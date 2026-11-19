@@ -146,6 +146,10 @@ cd examples
 python benchmark.py --trials 10                       # or --provider openai --model gpt-4.1-mini
 ```
 
+Free tiers have low rate limits. On Groq the script paces itself to 25 requests per minute;
+use `--rpm` to change that. Rate-limited calls are retried, waiting as long as the provider asks.
+Pass `--price-in` and `--price-out` (USD per 1M tokens) to see cost. Only publish a run with 0 errors.
+
 It runs three suites (core cases with many trials, every built-in injection attack, and messy
 rewrites of the order cases) and writes HTML reports plus a `SUMMARY.md` table to
 `benchmark_results/<provider>-<model>/`.

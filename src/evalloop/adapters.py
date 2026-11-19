@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -34,19 +36,67 @@ _RETRY_STATUS = {429, 500, 502, 503, 504}
 class AdapterError(RuntimeError):
     """Raised when the provider returns an error. Never contains the API key."""
 
-    def __init__(self, message: str, status: Optional[int] = None):
+    def __init__(self, message: str, status: Optional[int] = None, retry_after: Optional[float] = None):
         super().__init__(message)
         self.status = status
+        self.retry_after = retry_after
+
+
+def _parse_retry_after(header: Optional[str], body: str) -> Optional[float]:
+    """Seconds to wait, from a Retry-After header or text like 'try again in 1m2.5s' or 'in 850ms'."""
+    if header:
+        try:
+            return max(0.0, float(header))
+        except ValueError:
+            pass
+    m = re.search(r"try again in ((?:\d+(?:\.\d+)?(?:ms|h|m|s))+)", body or "")
+    if not m:
+        return None
+    total = 0.0
+    for num, unit in re.findall(r"(\d+(?:\.\d+)?)(ms|h|m|s)", m.group(1)):
+        total += float(num) * {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}[unit]
+    return total
+
+
+def _backoff(exc: "AdapterError", attempt: int) -> float:
+    """How long to wait before retrying: what the provider asked for, else exponential."""
+    if exc.retry_after is not None:
+        return min(90.0, exc.retry_after + 0.5)
+    return min(60.0, 2.0 ** attempt * 2)
+
+
+class _Pacer:
+    """Spaces requests so at most `rpm` start per minute, across threads."""
+
+    def __init__(self, rpm: float, sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.monotonic):
+        self.gap, self.sleep, self.clock = 60.0 / rpm, sleep, clock
+        self.next = 0.0
+        self.lock = threading.Lock()
+
+    def wait(self) -> None:
+        with self.lock:
+            now = self.clock()
+            start = max(now, self.next)
+            self.next = start + self.gap
+        if start > now:
+            self.sleep(start - now)
+
+
+USER_AGENT = "evalloop/0.6.1 (+https://github.com/sumitparmartech/evalloop)"
 
 
 def _http_post(url: str, payload: dict, headers: dict, timeout: float) -> dict:
+    # Some providers sit behind a CDN that rejects the default "Python-urllib" user agent
+    # with HTTP 403 (Cloudflare error 1010), so always send a real one.
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json", **headers}
     req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as exc:
-        body = exc.read().decode(errors="replace")[:200]
-        raise AdapterError(f"HTTP {exc.code}: {body}", exc.code) from None
+        full = exc.read().decode(errors="replace")
+        wait = _parse_retry_after(exc.headers.get("retry-after") if exc.headers else None, full)
+        raise AdapterError(f"HTTP {exc.code}: {full[:200]}", exc.code, wait) from None
     except urllib.error.URLError as exc:
         raise AdapterError(f"could not reach {url}: {exc.reason}") from None
 
@@ -65,7 +115,8 @@ def chat_agent(
     price_in: float = 0.0,
     price_out: float = 0.0,
     timeout: float = 60.0,
-    retries: int = 2,
+    retries: int = 5,
+    rpm: Optional[float] = None,
     post: Optional[Callable[..., dict]] = None,
     sleep: Callable[[float], None] = time.sleep,
 ) -> Callable:
@@ -78,6 +129,7 @@ def chat_agent(
     key = api_key if api_key is not None else (os.environ.get(api_key_env, "") if api_key_env else "")
     send = post or _http_post
     url = base_url.rstrip("/") + "/chat/completions"
+    gate = _Pacer(rpm, sleep) if rpm else None  # rpm: cap requests per minute (free tiers)
 
     def call(messages: list) -> dict:
         headers = {"Content-Type": "application/json"}
@@ -85,11 +137,13 @@ def chat_agent(
             headers["Authorization"] = "Bearer " + key
         payload = {"model": model, "messages": messages, "tools": tools, "tool_choice": "auto", "temperature": temperature}
         for attempt in range(retries + 1):
+            if gate:
+                gate.wait()
             try:
                 return send(url, payload, headers, timeout)
             except AdapterError as exc:
                 if exc.status in _RETRY_STATUS and attempt < retries:
-                    sleep(2 ** attempt * 2)
+                    sleep(_backoff(exc, attempt))
                     continue
                 raise
         raise AdapterError("unreachable")
@@ -198,7 +252,7 @@ def anthropic_agent(
                 return send(base_url, payload, headers, timeout)
             except AdapterError as exc:
                 if (exc.status in _RETRY_STATUS or exc.status == 529) and attempt < retries:
-                    sleep(2 ** attempt * 2)
+                    sleep(_backoff(exc, attempt))
                     continue
                 raise
         raise AdapterError("unreachable")

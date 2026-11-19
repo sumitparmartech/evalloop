@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "evalloop-agents"
-version = "0.6.0"
+version = "0.6.1"
 description = "Unit tests and a CI gate for LLM agents: reliability (pass^k), multi-turn conversations, prompt injection, hallucination, loops, cost and latency. Works with OpenAI Agents SDK and LangGraph."
 readme = "README.md"
 requires-python = ">=3.9"

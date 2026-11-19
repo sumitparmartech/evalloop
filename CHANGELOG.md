@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1
+
+- Site: new "Tested on a real model" section with the Groq gpt-oss-120b benchmark (docs/benchmarks/), a "Why I built this" section, fixed the scroll story (numbers now always match the squares on screen) and the quickstart card layout, and toned down decoration.
+- Fix: HTTP adapters now send a real User-Agent. Providers behind Cloudflare (for example Groq) rejected the default Python-urllib agent with HTTP 403, so every trial failed.
+- `examples/benchmark.py` prints the first API error, so a broken key or model name is obvious. New flags: `--rpm` (Groq defaults to 25), `--price-in`, `--price-out`.
+- Rate limits: `chat_agent(rpm=...)` paces requests across all trials, and HTTP 429 retries now wait as long as the provider asks (Retry-After or "try again in ..."), with 5 retries by default.
+- CI: Python 3.9 dropped from the GitHub matrix (no longer available on the runner image), actions updated to Node 24.
+
 ## 0.6.0
 
 - New website design: a "graded paper" hero that marks a hallucinated amount live, a scroll story from 33% to 100%, a 3-step quickstart with tabs for plain Python, OpenAI Agents SDK and LangGraph, hover animations on every check, a dark "Try it live" lab with a one-click demo, a sticky how-it-works rail, a mobile menu, and full reduced-motion support.

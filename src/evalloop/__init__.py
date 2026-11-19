@@ -32,7 +32,7 @@ from .instrument import agent, current, log_llm, poisoning, record, tool
 from .instrument import apply_poison as poisoned
 from .runner import Case, Context, Conversation, Turn, SuiteResult, diff_runs, run_suite
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 __all__ = [
     "AdapterError", "poisoned", "INJECTIONS", "injection_cases", "perturb", "variants", "agent", "tool", "log_llm", "record", "current", "poisoning", "Case", "Conversation", "Turn", "Check", "CheckResult", "Context", "Step", "SuiteResult", "Trace", "Tracer",
